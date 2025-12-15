@@ -8,8 +8,9 @@ import time
 
 # TODO: Do something useful
 
+n = 0
 while True:
     # spin forever to prevent annoying end-of-code yellow blinking NeoPixels
-    time.sleep(1)
-
-
+    time.sleep(2)
+    print(n)
+    n += 1
