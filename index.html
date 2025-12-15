@@ -6,34 +6,66 @@
 <style>
 :root{
 color-scheme:light dark; /* use browser defaults for system darkmode setting */
---F: #ffdcec; --B: #1d1d1d; --H: #25c3c0; --L: #459cda; --O: #aaa;
---BTN: #054407;
+--F: #ffdcec; --B: #1d1d1d; --H: #25c3c0; --BTN: #054407;
 }
 @media (prefers-color-scheme: light){
- :root{--F: #101010; --B: #f5f5f5; --H: #313131; --L: #3f40f9; --O: #444;
-        --BTN: #3dff4d;}
+ :root{--F: #101010; --B: #f5f5f5; --H: #313131; --BTN: #3dff4d;}
 }
-html{-webkit-text-size-adjust:none;font-size:14pt;font-family: sans-serif;}
-main{margin:0 auto;max-width:700px;}
-#connect{float: right; background: var(--BTN); font-size: 24px; padding: 10px;
- border-radius: 13px; border: 2px solid var(--H);}
-#connect.mute{ background: var(--B); color: var(--F); font-size: 18px; }
-
+html{-webkit-text-size-adjust: none; font-size: 14pt; font-family: sans-serif;}
+#connect{
+ float: right;
+ background: var(--BTN);
+ font-size: 18px;
+ padding: 10px;
+ border-radius: 13px;
+ border: 2px solid var(--H);
+}
+#connect.mute{ background: var(--B); color: var(--F);}
+#log,#compose{padding: 5px 10px;}
+#log p{margin: 1px; padding: 0;}
+#log,#compose{border: 2.5px solid var(--H);}
+#log{grid-area: L;
+  overflow: auto;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  border-bottom: none;
+}
+header{grid-area: H;}
+main{grid-area: M; padding-top: 10px;}
+#compose{grid-area: C;
+  -webkit-appearance: none;
+  outline: none;
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+  border-top-width: 2.5px;
+  background-color: inherit;
+}
+body{
+ display: grid;
+ grid: ". H ." auto
+       ". M ." 20em
+       ". . ." 1fr / 1fr minmax(auto,640px) 1fr;
+}
+main{display: grid; grid: "L" 1fr "C" 2em / 1fr;}
 </style>
 </head>
 <body>
-<main>
+
+<header>
 
 <h1>Morse Tutor</h1>
-
 <button id="connect">Connect</button>
-
 <p>Serial Port: <span id="status">[no connection]</span></p>
 
-<p>This is some placeholder text and a <a href="#">link</a> to nothing.</p>
+</header>
+<main>
+
+<div id="log" role="log" aria-label="chat log" aria-live="polite"></div>
+
+<input id="compose" aria-label="chat box" type="text" spellcheck="false"
+ autofocus autocapitalize="none">
 
 <script type="module" src="main.js"></script>
-
 </main>
 </body>
 </html>

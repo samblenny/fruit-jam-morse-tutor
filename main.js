@@ -2,11 +2,9 @@
 /* SPDX-FileCopyrightText: Copyright 2025 Sam Blenny */
 "use strict";
 
-// Connection status span
 const STATUS = document.querySelector('#status');
-
-// Play button
 const CONNECT = document.querySelector('#connect');
+const CHATLOG = document.querySelector("#log");
 
 // Serial port reader
 var READER = null;
@@ -23,12 +21,22 @@ function setStatus(s) {
     STATUS.textContent = s;
 }
 
+// Append plain text to chat log and scroll so it is visible. This is uses
+// `Node.textContent = ...` to escape user input (anti-XSS precaution).
+function chatLogPlainText(unsafeMessage) {
+    let p = document.createElement('p');
+    p.textContent = unsafeMessage;
+    CHATLOG.insertAdjacentElement('beforeend', p);
+    CHATLOG.scrollTop = CHATLOG.scrollHeight;
+}
+
 // Handle complete lines of serial port input
 async function handleLine(line, state) {
     // =================================================
     // TODO: Implement a mechanic for playing Morse Code
     // =================================================
     console.log(line)
+    chatLogPlainText(line)
 }
 
 // Parse a chunk of serial data to assemble complete lines.
@@ -58,33 +66,23 @@ async function parseChunk(chunk, state) {
 
 // Buffer serial port data into lines (close port when done)
 async function readLines(port) {
-    const state = {
-        lineSync: false,
-        lineBuf: '',
-        data: [],
-        memFree: '',
-    };
+    const state = {lineSync: false, lineBuf: '', data: [], memFree: ''};
     const decoder = new TextDecoderStream();
     const pipeClosedPromise = port.readable.pipeTo(decoder.writable);
     READER = decoder.readable.getReader();
     try {
         while (true) {
             const {value, done} = await READER.read();
-            if (done) {
-                break;
-            }
-            if (value) {
-                parseChunk(value, state);
-            }
+            if (done) { break; }
+            if (value) { parseChunk(value, state); }
         }
     } catch (err) {
         // expected on cancel / disconnect
-        console.log("readLines while(true) try/catch:", err);
     } finally {
         // Carefully release stream locks so .close() will work. Awaiting the
         // promise for the pipe to close is necessary to avoid an error.
         READER.releaseLock();
-        await pipeClosedPromise.catch(() => {/* this makes it all be ok */});
+        await pipeClosedPromise.catch(() => {/* expected. this is normal. */});
         await port.close();
         CONNECT.classList.remove('on', 'mute');
         CONNECT.textContent = 'Connect';
