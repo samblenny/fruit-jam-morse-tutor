@@ -4,6 +4,7 @@
 # See NOTES.md for documentation links
 #
 from audiobusio import I2SOut
+import audiocore
 from board import (
     I2C, I2S_BCLK, I2S_DIN, I2S_MCLK, I2S_WS, PERIPH_RESET
 )
@@ -11,6 +12,7 @@ from digitalio import DigitalInOut, Direction, Pull
 import displayio
 import gc
 from micropython import const
+from pwmio import PWMOut
 import synthio
 import time
 import ulab.numpy as np
@@ -26,58 +28,33 @@ from sb_morse import MorseKeyer
 SIDETONE_HZ = const(650)
 
 # DAC and Synthesis parameters
-SAMPLE_RATE = const(44100)
+SAMPLE_RATE = const(8000)
 CHAN_COUNT  = const(1)
-BUFFER_SIZE = const(1024)
-#==============================================================
-# CAUTION! When this is set to True, the headphone jack will
-# send a line-level output suitable use with a mixer or powered
-# speakers, but that will be _way_ too loud for earbuds. For
-# finer control of line level volume, adjust LL_DAC_VOLUME.
-LINE_LEVEL = const(True)
-LL_HEADPHONE_VOLUME = 0
-#==============================================================
+BUFFER_SIZE = const(256)
+
+# I2S MCLK clock frequency
+MCLK_HZ = const(15_000_000)
 
 
-def init_dac_audio_synth(i2c):
-    # Configure Fruit Jam rev D TLV320 I2S DAC and make a Synthesizer.
-    gc.collect()
-    # 1. Reset DAC (reset is active low)
-    rst = DigitalInOut(PERIPH_RESET)
-    rst.direction = Direction.OUTPUT
-    rst.value = False
-    time.sleep(0.1)
-    rst.value = True
-    time.sleep(0.05)
-    # 2. Configure sample rate, bit depth, and output port
+
+def configure_dac(i2c, sample_rate, mclk_hz):
+    # Configure TLV320DAC (this requires a separate 15 MHz PWMOut to MCLK)
+
+    # 1. Initialize DAC (this includes a soft reset and sets minimum volumes)
     dac = TLV320DAC3100(i2c)
-    dac.configure_clocks(sample_rate=SAMPLE_RATE, bit_depth=16)
+
+    # 2. Configure headphone/speaker routing and volumes (order matters here)
     dac.speaker_output = False
     dac.headphone_output = True
-    # 3. Adjust volume for for line-level if needed, otherwise use default
-    #    volume set by `dac.headphone_output = True`
-    if LINE_LEVEL:
-        # This gives a line output level suitable for plugging into a mixer or
-        # the AUX input of a powered speaker (THIS IS TOO LOUD FOR HEADPHONES!)
-        dac.headphone_volume = LL_HEADPHONE_VOLUME
-    # 4. Configure I2S for Fruit Jam rev D
-    audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_WS, data=I2S_DIN)
-    # 5. Configure synthio patch to generate sine wave notes
-    vca = synthio.Envelope(
-        attack_time=0.01, decay_time=0, sustain_level=0.95,
-        release_time=0.03, attack_level=0.95
-    )
-    sine_samples = round(SAMPLE_RATE * 10 / SIDETONE_HZ)
-    sinewave = np.array(
-        np.sin(np.linspace(0, 2*np.pi, sine_samples, endpoint=False)) * 32760,
-        dtype=np.int16
-    )
-    synth = synthio.Synthesizer(
-        sample_rate=SAMPLE_RATE, channel_count=CHAN_COUNT, #envelope=vca,
-        waveform=sinewave
-    )
-    audio.play(synth)
-    return (dac, audio, synth)
+    dac.dac_volume = -3  # Keep this below 0 to avoid DSP filter clipping
+    dac.headphone_volume = 0  # CAUTION! Line level. Too loud for headphones!
+
+    # 3. Configure the right PLL and CODEC settings for our sample rate
+    dac.configure_clocks(sample_rate=sample_rate, mclk_freq=MCLK_HZ)
+
+    # 4. Wait for power-on volume ramp-up to finish
+    time.sleep(0.35)
+    return dac
 
 
 def run():
@@ -85,34 +62,41 @@ def run():
     displayio.release_displays()
     gc.collect()
 
-    # Set up the audio stuff for a basic synthesizer
+    # Set up I2C and I2S buses
     i2c = I2C()
-    (dac, audio, synth) = init_dac_audio_synth(i2c)
+    audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_WS, data=I2S_DIN)
+
+    # Set up 15 MHz MCLK PWM clock output for less hiss and distortion
+    mclk_pwm = PWMOut(I2S_MCLK, frequency=MCLK_HZ, duty_cycle=2**15)
+
+    # Initialize DAC for 8 kHz sample rate
+    dac = configure_dac(i2c, SAMPLE_RATE, MCLK_HZ)
+
+    # Load 12 WPM wav files (100ms dit, 300ms dah)
+    dit = audiocore.WaveFile("dit_8kHz_12wpm.wav")
+    dah = audiocore.WaveFile("dah_8kHz_12wpm.wav")
 
     # Morse Code timing generator
     gc.collect()
     mk = MorseKeyer()
     gc.collect()
 
-    # Debug dump Morse timing info
-    print()
-    print("Morse Characters and Prosigns:", mk.chars)
-    print()
-
-    # Cache function references (go faster)
-    Note = synthio.Note
+    # Cache function and number references (go faster)
     sleep = time.sleep
-    press = synth.press
-    release = synth.release
+    play = audio.play
+    ditsec = mk.sec_per_dot
+    dahsec = ditsec * 3
 
     # Send some Morse code on the Fruit Jam DAC
-    note = Note(frequency=SIDETONE_HZ)
     while True:
-        msg = "PARIS. <AR>"
+        msg = "CQ PARIS 123. <AR>"
+        print(f"playing: {msg}")
         for (on_sec, off_sec) in mk.timings(msg):
-            press(note)
-            sleep(on_sec)
-            release(note)
-            sleep(off_sec)
+            if on_sec == ditsec:
+                play(dit)
+            else:
+                play(dah)
+            sleep(on_sec + off_sec)
+        sleep(2)
 
 run()
