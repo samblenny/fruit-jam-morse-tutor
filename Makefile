@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: Copyright 2025 Sam Blenny
 
-.PHONY: help bundle sync tty clean www
+.PHONY: help bundle sync tty clean
 
 # Name of top level folder in project bundle zip file should match repo name
 PROJECT_DIR = $(shell basename `git rev-parse --show-toplevel`)
@@ -27,7 +27,3 @@ tty:
 
 clean:
 	rm -rf build
-
-# Serve index.html and main.js on http://localhost:8000
-www:
-	python3 -m http.server --bind 127.0.0.1
