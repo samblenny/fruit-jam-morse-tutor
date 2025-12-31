@@ -12,6 +12,7 @@ To customize the contents of your project bundle, edit bundle_manifest.cfg
 according to the comments in that file.
 """
 from configparser import ConfigParser
+import glob
 import os
 import os.path
 from os.path import abspath, basename, expanduser, isdir, isfile
@@ -66,14 +67,19 @@ for d in dirs.values():
         os.makedirs(d)
 
 # Stage files into the zip archive directory tree
-for src in cfg['root']:
-    dst = dirs['10.x']
-    if isfile(src):
-        shutil.copy2(src, dst)
-    elif isdir(src):
-        shutil.copytree(src, os.path.join(dst, basename(src)))
-    else:
-        raise FileNotFoundError(src)
+for pattern in cfg['root']:
+    matches = glob.glob(pattern) # expand globs like '*.wav' or the like
+    if not matches:
+        raise FileNotFoundError(pattern)
+    for src in matches:
+        dst = os.path.join(dirs['10.x'], src)
+        if isfile(src):
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
+        elif isdir(src):
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        else:
+            raise FileNotFoundError(src)
 
 # Download library bundle archives with curl, use cache for local testing
 url10 = cfg['10.x']
