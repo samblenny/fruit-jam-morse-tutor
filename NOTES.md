@@ -9,6 +9,9 @@ Audio Docs & Examples:
 - https://docs.circuitpython.org/en/latest/shared-bindings/synthio/
 - https://github.com/todbot/circuitpython-synthio-tricks
 - https://docs.circuitpython.org/projects/tlv320/en/latest/api.html
+- https://docs.circuitpython.org/en/latest/shared-bindings/audiocore/
+- https://docs.circuitpython.org/en/latest/shared-bindings/audiofilters/
+- https://docs.circuitpython.org/en/latest/shared-bindings/audiomixer/
 
 Morse Code References:
 - ITU-R M.1677-1 International Morse Code

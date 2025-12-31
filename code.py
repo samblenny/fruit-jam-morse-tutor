@@ -5,18 +5,18 @@
 #
 from audiobusio import I2SOut
 import audiocore
+import audiofilters
+import audiomixer
 from board import (
     I2C, I2S_BCLK, I2S_DIN, I2S_MCLK, I2S_WS, PERIPH_RESET
 )
 from digitalio import DigitalInOut, Direction, Pull
-import displayio
 import gc
 from micropython import const
 from pwmio import PWMOut
 import synthio
 import time
 import ulab.numpy as np
-
 from adafruit_tlv320 import TLV320DAC3100
 
 
@@ -25,16 +25,14 @@ from sb_morse import MorseKeyer
 
 
 # Morse Code Options
-SIDETONE_HZ = const(650)
+MORSE_HZ = const(622.25)
+MORSE_WPM = const(12)
 
-# DAC and Synthesis parameters
+# DAC/Synth/Filter sample rate
 SAMPLE_RATE = const(8000)
-CHAN_COUNT  = const(1)
-BUFFER_SIZE = const(256)
 
 # I2S MCLK clock frequency
 MCLK_HZ = const(15_000_000)
-
 
 
 def configure_dac(i2c, sample_rate, mclk_hz):
@@ -59,9 +57,6 @@ def configure_dac(i2c, sample_rate, mclk_hz):
 
 def run():
 
-    displayio.release_displays()
-    gc.collect()
-
     # Set up I2C and I2S buses
     i2c = I2C()
     audio = I2SOut(bit_clock=I2S_BCLK, word_select=I2S_WS, data=I2S_DIN)
@@ -72,31 +67,43 @@ def run():
     # Initialize DAC for 8 kHz sample rate
     dac = configure_dac(i2c, SAMPLE_RATE, MCLK_HZ)
 
-    # Load 12 WPM wav files (100ms dit, 300ms dah)
-    dit = audiocore.WaveFile("dit_8kHz_12wpm.wav")
-    dah = audiocore.WaveFile("dah_8kHz_12wpm.wav")
+    # Build synthio sinewave patch with bandpass filter
+    sinewave = np.array(
+        np.sin(np.linspace(0, 2*np.pi, 640, endpoint=False)) * 30000,
+        dtype=np.int16)
+    synth = synthio.Synthesizer(sample_rate=SAMPLE_RATE, channel_count=1,
+        envelope=None, waveform=sinewave)
+    bandpass = synthio.Biquad(synthio.FilterMode.BAND_PASS, MORSE_HZ, Q=6.5)
+    bp_filter = audiofilters.Filter(filter=bandpass, buffer_size=256,
+        sample_rate=SAMPLE_RATE)
+    mixer = audiomixer.Mixer(sample_rate=SAMPLE_RATE, buffer_size=256)
+    audio.play(mixer)
+    mixer.voice[0].play(bp_filter)
+    mixer.voice[0].level = 0.99
+    bp_filter.play(synth)
 
     # Morse Code timing generator
     gc.collect()
-    mk = MorseKeyer()
+    mk = MorseKeyer(wpm=MORSE_WPM)
     gc.collect()
 
-    # Cache function and number references (go faster)
+    # Cache function references (go faster)
     sleep = time.sleep
-    play = audio.play
-    ditsec = mk.sec_per_dot
-    dahsec = ditsec * 3
+    press = synth.press
+    release = synth.release
+    timings = mk.timings
 
     # Send some Morse code on the Fruit Jam DAC
+    sleep(0.5)
+    msg = "CQ PARIS 123. <AR>"
+    print(f"playing: {msg}")
+    note = synthio.Note(frequency=MORSE_HZ)
     while True:
-        msg = "CQ PARIS 123. <AR>"
-        print(f"playing: {msg}")
-        for (on_sec, off_sec) in mk.timings(msg):
-            if on_sec == ditsec:
-                play(dit)
-            else:
-                play(dah)
-            sleep(on_sec + off_sec)
+        for (on_sec, off_sec) in timings(msg):
+            press(note)
+            sleep(on_sec)
+            release(note)
+            sleep(off_sec)
         sleep(2)
 
 run()

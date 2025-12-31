@@ -100,7 +100,6 @@ Z --..
 
     def timings(self, text):
         # Generator yielding (on, off) timing tuples for text encoded as Morse
-        text = text.strip()  # remove extraneous whitespace
         if not text:
             return None
 
